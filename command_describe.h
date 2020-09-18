@@ -16,9 +16,10 @@
 #define CYCLE_END }
 #define COUNTER _
 
-#define TRSL(str) fprintf(file, str);
+#define WRITE_BYTE(byte) fprintf(file, "%c", byte);
 #define PC_INC(num) command_shift[*pc + 1] = command_shift[*pc] + (num); (*pc)++;
 #define ARG_T(num) commands[*pc + (num)] 
+#define WRITE(str, len) fwrite(str, len, 1, file)
 
 #define DRAW_NEXT_OBJ(type, arg) printf("%" #type, arg);
 
@@ -116,11 +117,11 @@ DEF_FUNC(push, 10, 2, {PUSH(ARG);},
 	
 	int arg = ARG_T(1);
 
-	fprintf(file, "\x68");
+	WRITE("\x68", 1);
 	for(int i = 0; i < 4; i++){
 		char byte = arg % 0x100;
 		arg /= 0x100;
-		fprintf(file, "%c", byte);
+		WRITE_BYTE(byte);
 	}
 
 	PC_INC(0)
@@ -143,7 +144,7 @@ DEF_FUNC(push_reg, 11, 2, {PUSH(REG(ARG));}, correct = false;,
 			#undef DEF_REG
 	
 	
-	fprintf(file, "%hhx", byte);
+	WRITE_BYTE(byte);
 
 	PC_INC(-1)
 	PC_INC(0)
@@ -155,11 +156,11 @@ DEF_FUNC(push_oper, 12, 2, {OPER(ARG) = POP;}, correct = false;,
 	int arg = ARG_T(1);
 	
 	char byte = 0;
-	fprintf(file, "\x5f\x48\x89\x3C\x25");
+	WRITE("\x5f\x48\x89\x3C\x25", 5);
 	for(int i = 0; i < 4; i++){
 		byte = arg % 0x100;
 		arg /= 0x100;
-		fprintf(file, "%c", byte);
+		WRITE_BYTE(byte);
 	}
 
 	PC_INC(0)
@@ -172,7 +173,7 @@ DEF_FUNC(push_oper_reg, 13, 2, {OPER(REG(ARG)) = POP;}, correct = false;,
 	int reg = ARG_T(1);
 	
 	char byte = 0x38;
-	fprintf(file, "\x5F\x48\x89");
+	WRITE("\x5F\x48\x89", 3);
 
 	#define DEF_REG(name, num, trsl_num) else if(reg == num){\
 						byte += trsl_num;\
@@ -183,7 +184,7 @@ DEF_FUNC(push_oper_reg, 13, 2, {OPER(REG(ARG)) = POP;}, correct = false;,
 			else return false;
 			#undef DEF_REG
 
-	fprintf(file, "%hhx", byte);
+	WRITE_BYTE(byte);
 
 	PC_INC(0)
 	PC_INC(2)
@@ -242,7 +243,7 @@ DEF_FUNC(pop, 20, 1, {POP;},
 		PUT(CMD_pop);	
 	},
 
-	fprintf(file, "\x5f");
+	WRITE("\x5f", 1);
 
 	PC_INC(0)
 
@@ -263,7 +264,7 @@ DEF_FUNC(pop_reg, 21, 2, {REG(ARG) = POP;}, {correct = false;},
 			#undef DEF_REG
 	
 	
-	fprintf(file, "%hhx", byte);
+	WRITE_BYTE(byte);
 
 	PC_INC(-1)
 	PC_INC(0)
@@ -276,11 +277,11 @@ DEF_FUNC(pop_oper, 22, 2, {PUSH(OPER(ARG));}, {correct = false;},
 	int arg = ARG_T(1);
 	
 	char byte = 0;
-	fprintf(file, "\xff\x34\x25");
+	WRITE("\xff\x34\x25", 3);
 	for(int i = 0; i < 4; i++){
 		byte = arg % 0x100;
 		arg /= 0x100;
-		fprintf(file, "%c", byte);
+		WRITE_BYTE(byte);
 	}
 
 	PC_INC(0)
@@ -294,7 +295,7 @@ DEF_FUNC(pop_oper_reg, 23, 2, {PUSH(OPER(REG(ARG)));}, {correct = false;},
 	int reg = ARG_T(1);
 	
 	char byte = 0x30;
-	fprintf(file, "\xFF");
+	WRITE("\xFF", 1);
 
 	#define DEF_REG(name, num, trsl_num) else if(reg == num){\
 						byte += trsl_num;\
@@ -305,7 +306,7 @@ DEF_FUNC(pop_oper_reg, 23, 2, {PUSH(OPER(REG(ARG)));}, {correct = false;},
 			else return false;
 			#undef DEF_REG
 
-	fprintf(file, "%hhx", byte);
+	WRITE_BYTE(byte);
 
 	PC_INC(0)
 	PC_INC(0)
@@ -316,7 +317,7 @@ DEF_FUNC(pop_oper_reg, 23, 2, {PUSH(OPER(REG(ARG)));}, {correct = false;},
 
 DEF_FUNC(add, 30, 1, {PUSH(POP + POP);}, PUT(CMD_add), 
 
-	fprintf(file, "\x5e\x5f\x48\x01\xfe\x56");
+	WRITE("\x5e\x5f\x48\x01\xfe\x56", 6);
 
 	PC_INC(4)
 )
@@ -324,15 +325,15 @@ DEF_FUNC(add, 30, 1, {PUSH(POP + POP);}, PUT(CMD_add),
 
 DEF_FUNC(jmp, 40, 2, { PC = ARG; PC --;}, JMP_do_param(CMD_jmp),
 
-	fprintf(file, "\xeb");
+	WRITE("\xeb", 1);
 
 	if(found_shifts){
 		int arg = ARG_T(1);
 		char byte = arg + command_shift[arg] - *pc - command_shift[*pc] - 2;
-		fprintf(file, "%hhx", byte);
+		WRITE_BYTE(byte);
 	}
 	else{
-		fprintf(file, "\x00");	//byte = dest - cur - 2
+		WRITE("\x00", 1);	//byte = dest - cur - 2
 	}
 
 	PC_INC(0)
@@ -342,7 +343,7 @@ DEF_FUNC(jmp, 40, 2, { PC = ARG; PC --;}, JMP_do_param(CMD_jmp),
 
 DEF_FUNC(out, 50, 1, DRAW_NEXT_OBJ(d, POP);, PUT(CMD_out);, 
 
-	fprintf(file, "\x48\xC7\xC7\x01\x00\x00\x00\x48\x89\xE6\x48\x83\xEE\x04\x52\x48\xC7\xC2\x01\x00\x00\x00\x50\x48\xC7\xC0\x01\x00\x00\x00\x0F\x05\x58\x5A");
+	WRITE("\x48\xC7\xC7\x01\x00\x00\x00\x48\x89\xE6\x48\x83\xEE\x04\x52\x48\xC7\xC2\x01\x00\x00\x00\x50\x48\xC7\xC0\x01\x00\x00\x00\x0F\x05\x58\x5A", 34);
 	
 	PC_INC(33)
 
@@ -356,7 +357,7 @@ DEF_FUNC(fout, 52, 1, printf("%." ACCURACY_PRINT "f", ((float) POP) / ACCURACY);
 
 DEF_FUNC(end, 0, 1, break;, PUT(CMD_end);, 
 
-	fprintf(file, "\x48\xC7\xC0\x3C\x00\x00\x00\x48\xC7\xC7\x00\x00\x00\x00\x0F\x05");
+	WRITE("\x48\xC7\xC0\x3C\x00\x00\x00\x48\xC7\xC7\x00\x00\x00\x00\x0F\x05", 16);
 	PC_INC(15)
 
 )
@@ -364,7 +365,7 @@ DEF_FUNC(end, 0, 1, break;, PUT(CMD_end);,
 
 DEF_FUNC(mul, 60, 1, PUSH(POP * POP);, PUT(CMD_mul);,
 
-	fprintf(file, "\x48\x89\xC7\x58\x5E\x52\x48\xC7\xC2\x00\x00\x00\x00\x48\xF7\xEE\x5A\x50\x48\x89\xF8");
+	WRITE("\x48\x89\xC7\x58\x5E\x52\x48\xC7\xC2\x00\x00\x00\x00\x48\xF7\xEE\x5A\x50\x48\x89\xF8", 21);
 
 	PC_INC(20)
 )
@@ -375,15 +376,15 @@ DEF_FUNC(fmul, 61, 1, PUSH((int) (((float) POP)/ACCURACY) * (((float) POP)/ACCUR
 
 DEF_FUNC(ja,  41, 2, if(POP > POP) {PC = ARG; PC--;}else{DROP(ARG);}, JMP_do_param(CMD_ja ),
 
-	fprintf(file, "\x77");
+	WRITE("\x77", 1);
 
 	if(found_shifts){
 		int arg = ARG_T(1);
 		char byte = arg + command_shift[arg] - *pc - command_shift[*pc] - 2;
-		fprintf(file, "%hhx", byte);
+		WRITE_BYTE(byte);
 	}
 	else{
-		fprintf(file, "\x00");	//byte = dest - cur - 2
+		WRITE("\x00", 1);	//byte = dest - cur - 2
 	}
 
 	PC_INC(0)
@@ -394,15 +395,15 @@ DEF_FUNC(ja,  41, 2, if(POP > POP) {PC = ARG; PC--;}else{DROP(ARG);}, JMP_do_par
 
 DEF_FUNC(jae, 42, 2, if(POP >= POP){PC = ARG; PC--;}else{DROP(ARG);}, JMP_do_param(CMD_jae),
 
-	fprintf(file, "\x73");
+	WRITE("\x73", 1);
 
 	if(found_shifts){
 		int arg = ARG_T(1);
 		char byte = arg + command_shift[arg] - *pc - command_shift[*pc] - 2;
-		fprintf(file, "%hhx", byte);
+		WRITE_BYTE(byte);
 	}
 	else{
-		fprintf(file, "\x00");	//byte = dest - cur - 2
+		WRITE("\x00", 1);	//byte = dest - cur - 2
 	}
 
 	PC_INC(0)
@@ -413,15 +414,15 @@ DEF_FUNC(jae, 42, 2, if(POP >= POP){PC = ARG; PC--;}else{DROP(ARG);}, JMP_do_par
 
 DEF_FUNC(jb,  43, 2, if(POP < POP) {PC = ARG; PC--;}else{DROP(ARG);}, JMP_do_param(CMD_jb ),
 
-	fprintf(file, "\x72");
+	WRITE("\x72", 1);
 
 	if(found_shifts){
 		int arg = ARG_T(1);
 		char byte = arg + command_shift[arg] - *pc - command_shift[*pc] - 2;
-		fprintf(file, "%hhx", byte);
+		WRITE_BYTE(byte);
 	}
 	else{
-		fprintf(file, "\x00");	//byte = dest - cur - 2
+		WRITE("\x00", 1);	//byte = dest - cur - 2
 	}
 
 	PC_INC(0)
@@ -432,15 +433,15 @@ DEF_FUNC(jb,  43, 2, if(POP < POP) {PC = ARG; PC--;}else{DROP(ARG);}, JMP_do_par
 
 DEF_FUNC(jbe, 44, 2, if(POP <= POP){PC = ARG; PC--;}else{DROP(ARG);}, JMP_do_param(CMD_jbe),
 
-	fprintf(file, "\x76");
+	WRITE("\x76", 1);
 
 	if(found_shifts){
 		int arg = ARG_T(1);
 		char byte = arg + command_shift[arg] - *pc - command_shift[*pc] - 2;
-		fprintf(file, "%hhx", byte);
+		WRITE_BYTE(byte);
 	}
 	else{
-		fprintf(file, "\x00");	//byte = dest - cur - 2
+		WRITE("\x00", 1);	//byte = dest - cur - 2
 	}
 
 	PC_INC(0)
@@ -451,15 +452,15 @@ DEF_FUNC(jbe, 44, 2, if(POP <= POP){PC = ARG; PC--;}else{DROP(ARG);}, JMP_do_par
 
 DEF_FUNC(je, 45, 2, if(POP == POP){PC = ARG; PC--;}else{DROP(ARG);}, JMP_do_param(CMD_je ),
 
-	fprintf(file, "\x74");
+	WRITE("\x74", 1);
 
 	if(found_shifts){
 		int arg = ARG_T(1);
 		char byte = arg + command_shift[arg] - *pc - command_shift[*pc] - 2;
-		fprintf(file, "%hhx", byte);
+		WRITE_BYTE(byte);
 	}
 	else{
-		fprintf(file, "\x00");	//byte = dest - cur - 2
+		WRITE("\x00", 1);	//byte = dest - cur - 2
 	}
 
 	PC_INC(0)
@@ -470,15 +471,15 @@ DEF_FUNC(je, 45, 2, if(POP == POP){PC = ARG; PC--;}else{DROP(ARG);}, JMP_do_para
 
 DEF_FUNC(jne, 46, 2, if(POP != POP){PC = ARG; PC--;}else{DROP(ARG);}, JMP_do_param(CMD_jne),
 
-	fprintf(file, "\x75");
+	WRITE("\x75", 1);
 
 	if(found_shifts){
 		int arg = ARG_T(1);
 		char byte = arg + command_shift[arg] - *pc - command_shift[*pc] - 2;
-		fprintf(file, "%hhx", byte);
+		WRITE_BYTE(byte);
 	}
 	else{
-		fprintf(file, "\x00");	//byte = dest - cur - 2
+		WRITE("\x00", 1);	//byte = dest - cur - 2
 	}
 
 	PC_INC(0)
@@ -495,7 +496,7 @@ DEF_FUNC(return, 100, 1, PC = POP; PC--;, PUT(CMD_return), "none";)
 
 DEF_FUNC(sub, 80, 1, {PUSH(POP - POP);}, PUT(CMD_sub), 
 
-	fprintf(file, "\x5E\x5F\x48\x29\xFE\x56");
+	WRITE("\x5E\x5F\x48\x29\xFE\x56", 6);
 
 	PC_INC(5)
 )
